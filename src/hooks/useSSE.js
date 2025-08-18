@@ -1,4 +1,3 @@
-// src/hooks/useSSE.js
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 const useSSE = (url, options = {}) => {
@@ -6,22 +5,19 @@ const useSSE = (url, options = {}) => {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
   const [lastEventId, setLastEventId] = useState(null);
+  const [connectionCount, setConnectionCount] = useState(0);
 
   const abortControllerRef = useRef(null);
   const readerRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
+  const sseConnectedOnceRef = useRef(false);
   const optionsRef = useRef(options);
 
-  // options 업데이트
-  useEffect(() => {
-    optionsRef.current = options;
-  }, [options]);
+  useEffect(() => { optionsRef.current = options; }, [options]);
 
-  const { reconnect = true, reconnectInterval = 3000, maxReconnectAttempts = 5, withCredentials = true } =
-      options;
+  const { reconnect = true, reconnectInterval = 3000, maxReconnectAttempts = 5, withCredentials = true } = options;
 
-  // 쿠키 읽기
   const getCookie = useCallback((name) => {
     const nameEQ = name + "=";
     const ca = document.cookie.split(';');
@@ -32,10 +28,9 @@ const useSSE = (url, options = {}) => {
     return null;
   }, []);
 
-  // SSE 연결
   const connect = useCallback(async () => {
     if (!url) return;
-    if (abortControllerRef.current) return; // 이미 연결 중이면 중복 방지
+    if (abortControllerRef.current) return; // 이미 연결 중이면 무시
 
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
@@ -50,6 +45,7 @@ const useSSE = (url, options = {}) => {
       if (lastEventId) headers['Last-Event-ID'] = lastEventId;
 
       setError(null);
+      setConnectionCount(prev => prev + 1);
 
       const response = await fetch(url, {
         method: 'GET',
@@ -87,8 +83,9 @@ const useSSE = (url, options = {}) => {
             if (eventData) {
               if (eventId) setLastEventId(eventId);
               try {
-                setData(JSON.parse(eventData));
-                currentOptions.onMessage?.(JSON.parse(eventData), { type: eventType, id: eventId });
+                const parsed = JSON.parse(eventData);
+                setData(parsed);
+                currentOptions.onMessage?.(parsed, { type: eventType, id: eventId });
               } catch {
                 setData(eventData);
                 currentOptions.onMessage?.(eventData, { type: eventType, id: eventId });
@@ -118,12 +115,15 @@ const useSSE = (url, options = {}) => {
         reconnectTimeoutRef.current = setTimeout(() => connect(), reconnectInterval);
       }
     } finally {
-      setIsConnected(false);
-      abortControllerRef.current = null;
+      if (abortControllerRef.current?.signal.aborted) {
+        setIsConnected(false);
+        sseConnectedOnceRef.current = false;
+        currentOptions.onClose?.();
+        abortControllerRef.current = null;
+      }
     }
   }, [url, lastEventId, reconnect, reconnectInterval, maxReconnectAttempts, withCredentials]);
 
-  // 연결 해제
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -133,44 +133,35 @@ const useSSE = (url, options = {}) => {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    sseConnectedOnceRef.current = false;
     setIsConnected(false);
     setError(null);
     optionsRef.current.onClose?.();
   }, []);
 
-  // 강제 재연결
   const forceReconnect = useCallback(() => {
     disconnect();
     reconnectAttemptsRef.current = 0;
     setError(null);
-    setTimeout(() => connect(), 1000);
+    setTimeout(() => connect(), 3000);
   }, [disconnect, connect]);
 
-  // 현재 탭에서만 연결 유지
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        connect();
-      } else {
-        disconnect();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    connect();
+  const isAuthenticated = useCallback(() => !!getCookie('access_token'), [getCookie]);
 
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      disconnect();
-    };
-  }, [connect, disconnect]);
+  useEffect(() => { return () => { disconnect(); }; }, [disconnect]);
 
-  // 인증 여부
-  const isAuthenticated = useCallback(() => {
-    const token = getCookie('access_token');
-    return !!token;
-  }, [getCookie]);
-
-  return { data, isConnected, error, lastEventId, connect, disconnect, forceReconnect, isAuthenticated: isAuthenticated(), getCookie };
+  return {
+    data,
+    isConnected,
+    error,
+    lastEventId,
+    connectionCount,
+    connect,
+    disconnect,
+    forceReconnect,
+    isAuthenticated: isAuthenticated(),
+    getCookie
+  };
 };
 
 export default useSSE;
