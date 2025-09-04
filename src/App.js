@@ -1,5 +1,4 @@
 // src/App.js
-
 import React from 'react';
 import SSEGateway from './components/SSEGateway';
 
