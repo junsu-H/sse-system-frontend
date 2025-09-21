@@ -150,13 +150,13 @@ const SSEGateway = () => {
             fractionalSecondDigits: 3
         });
 
-        setLogs(prev => [...prev.slice(-199), {
-            id: Date.now() + Math.random(),
-            message,
-            type,
-            timestamp,
-            fullTimestamp: new Date().toISOString()
-        }]);
+        // setLogs(prev => [...prev.slice(-199), {
+        //     id: Date.now() + Math.random(),
+        //     message,
+        //     type,
+        //     timestamp,
+        //     fullTimestamp: new Date().toISOString()
+        // }]);
     };
 
     // 자동 스크롤
@@ -277,43 +277,6 @@ const SSEGateway = () => {
         }
     };
 
-    const handleSettingsChange = (key, value) => {
-        setSseSettings(prev => ({ ...prev, [key]: value }));
-        addLog(`⚙️ 설정 변경: ${key} = ${value}`, LOG_TYPES.INFO);
-    };
-
-    const handleViewEventBuffer = () => {
-        const buffer = getEventBuffer();
-        addLog(`📊 이벤트 버퍼: ${buffer.length.toLocaleString()}개 이벤트`, LOG_TYPES.INFO);
-        console.log('Event Buffer:', buffer);
-        setShowEventBuffer(true);
-    };
-
-    const handleViewMetrics = () => {
-        const metrics = getMetrics();
-        addLog(`📈 메트릭스 조회: 총 ${metrics.totalEvents.toLocaleString()}개 이벤트`, LOG_TYPES.INFO);
-        console.log('SSE Metrics:', metrics);
-        setShowMetrics(true);
-    };
-
-    const handleExportLogs = () => {
-        const logsText = logs.map(log =>
-            `[${log.timestamp}] [${log.type.toUpperCase()}] ${log.message}`
-        ).join('\n');
-
-        const blob = new Blob([logsText], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `sse-gateway-logs-${new Date().toISOString().slice(0,19)}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        addLog('📄 로그 파일 다운로드 시작', LOG_TYPES.SUCCESS);
-    };
-
     // 유틸리티 함수들
     const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
         const r = Math.random() * 16 | 0;
@@ -367,6 +330,41 @@ const SSEGateway = () => {
         return `${Math.floor(ms/3600000)}시간 ${Math.floor((ms%3600000)/60000)}분`;
     };
 
+
+    const [testClientIdInput, setTestClientIdInput] = useState('');
+    const [testEventSource, setTestEventSource] = useState(null);
+    const [testIsConnected2, setTestIsConnected2] = useState(false);
+
+    // 1명 subscribe
+    const [testSubscribeClientId, setTestSubscribeClientId] = useState('');
+    // subscribe tps
+    const [testTpsInput, setTestTpsInput] = useState('5'); // 기본 5TPS
+
+    // cast tps
+    const [testCastTpsInput, setTestCastTpsInput] = useState('5');
+    // unicast
+    const [testCastClientId, setTestCastClientId] = useState('');
+
+    // last-event-id
+    const [testLastEventIdInput, setTestLastEventIdInput] = useState('');
+
+
+    // 여러명 /subscribe
+    const [testClientIdPrefix, setTestClientIdPrefix] = useState('');
+
+    // 여러 명 SSE 연결 상태 관리
+    const [testEventSources, setTestEventSources] = useState([]); // EventSource 배열
+    const [broadIsConnected, setBroadIsConnected] = useState(false);
+
+    // 여러 명 /broadcast 관련 상태
+    const [broadcastClientIdPrefix, setBroadcastClientIdPrefix] = useState('');
+    const [broadcastCastTpsInput, setBroadcastCastTpsInput] = useState('5'); // 기본 5TPS
+
+    // 여러 명 SSE 연결 상태 관리
+    const [testEventSourcesLast, setTestEventSourcesLast] = useState([]); // EventSource 배열
+    const [testBroadIsConnected, setTestBroadIsConnected] = useState(false); // 연결 상태
+
+
     return (
         <div className="sse-gateway">
             <header className="gateway-header">
@@ -383,6 +381,417 @@ const SSEGateway = () => {
           </span>
                 </div>
             </header>
+
+            {/* ------------------- 시나리오 박스 ------------------- */}
+            <section className="sse-section scenario-box">
+                <section className="sse-section scenario-box">
+                    {/* /subscribe TPS 테스트 (입력 기반) */}
+                    <div className="scenario-item">
+                        <p>1️⃣ 한 명 /subscribe TPS 테스트</p>
+                        <div className="tps-input-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <input
+                                type="text"
+                                placeholder="Client ID 입력"
+                                value={testSubscribeClientId}
+                                onChange={e => setTestSubscribeClientId(e.target.value)}
+                                style={{ width: '180px', padding: '4px' }}
+                            />
+                            <input
+                                type="number"
+                                min="1"
+                                placeholder="테스트할 TPS 입력"
+                                value={testTpsInput}
+                                onChange={e => setTestTpsInput(e.target.value)}
+                                style={{ width: '120px', padding: '4px' }}
+                            />
+                            <button
+                                className="btn green"
+                                onClick={() => {
+                                    const tps = parseInt(testTpsInput, 10);
+                                    if (!tps || tps <= 0) {
+                                        addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+                                    if (!testSubscribeClientId.trim()) {
+                                        addLog('❌ Client ID를 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+
+                                    addLog(`⚡ /subscribe TPS 테스트 시작: ${tps} TPS, Client ID: ${testSubscribeClientId}`, LOG_TYPES.INFO);
+
+                                    if (testIsConnected2) {
+                                        addLog('✂️ 기존 SSE 연결 종료', LOG_TYPES.INFO);
+                                        disconnect();
+                                    }
+
+                                    const delay = 1000 / tps;
+                                    for (let i = 0; i < tps; i++) {
+                                        setTimeout(async () => {
+                                            try {
+                                                await fetch(
+                                                    `${baseUrl}/sse/api/subscribe?clientId=${encodeURIComponent(testSubscribeClientId)}`,
+                                                    {
+                                                        method: 'GET',
+                                                        credentials: 'include',
+                                                        headers: { 'Last-Event-ID': testLastEventIdInput }
+                                                    }
+                                                );
+                                            } catch (err) {
+                                                addLog(`❌ /subscribe 호출 오류: ${err.message}`, LOG_TYPES.ERROR);
+                                            }
+                                        }, i * delay);
+                                    }
+                                }}
+                            >
+                                시작
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* 한 명 message publish TPS 테스트 */}
+                    <div className="scenario-item">
+                        <p>2️⃣ 한 명 message publish TPS 테스트</p>
+                        <div className="tps-input-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <input
+                                type="text"
+                                placeholder="Client ID 입력"
+                                value={testCastClientId}
+                                onChange={e => setTestCastClientId(e.target.value)}
+                                style={{ width: '180px', padding: '4px' }}
+                            />
+                            <input
+                                type="number"
+                                min="1"
+                                placeholder="테스트할 TPS 입력"
+                                value={testCastTpsInput}
+                                onChange={e => setTestCastTpsInput(e.target.value)}
+                                style={{ width: '120px', padding: '4px' }}
+                            />
+                            <button
+                                className="btn orange"
+                                onClick={() => {
+                                    const tps = parseInt(testCastTpsInput, 10);
+                                    if (!tps || tps <= 0) {
+                                        addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+                                    if (!testCastClientId.trim()) {
+                                        addLog('❌ Client ID를 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+
+                                    addLog(`⚡ /cast unicast TPS 테스트 시작: ${tps} TPS, Client ID: ${testCastClientId}`, LOG_TYPES.INFO);
+                                    const delay = 1000 / tps;
+
+                                    for (let i = 0; i < tps; i++) {
+                                        setTimeout(async () => {
+                                            try {
+                                                await fetch(`${baseUrl}/sse/api/cast`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    credentials: 'include',
+                                                    body: JSON.stringify({
+                                                        clientId: testCastClientId,
+                                                        eventId: `epoch-${Date.now()}-${i}`,
+                                                        message: `테스트 메시지 ${i + 1}`,
+                                                        sendType: 'unicast'
+                                                    })
+                                                });
+                                            } catch (err) {
+                                                addLog(`❌ /cast 호출 오류: ${err.message}`, LOG_TYPES.ERROR);
+                                            }
+                                        }, i * delay);
+                                    }
+                                }}
+                            >
+                                시작
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* last-event-id 처리 */}
+                    <div className="scenario-item">
+                        <p>3️⃣ 한 명 토큰 만료 후 Last-Event-ID로 /subscribe 재연결</p>
+                        <div className="last-event-id-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                                type="text"
+                                placeholder="Client ID 입력"
+                                value={testSubscribeClientId} // 한 명용 Client ID
+                                onChange={e => setTestSubscribeClientId(e.target.value)}
+                                style={{ padding: '4px', width: '180px' }}
+                            />
+                            <input
+                                type="text"
+                                placeholder="Last-Event-ID 입력"
+                                value={testLastEventIdInput}
+                                onChange={e => setTestLastEventIdInput(e.target.value)}
+                                style={{ padding: '4px', width: '220px' }}
+                            />
+                            <button
+                                className="btn red"
+                                onClick={() => {
+                                    if (!authIsAuthenticated) {
+                                        addLog('❌ 인증 필요: 토큰을 발급하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+                                    if (!testSubscribeClientId.trim()) {
+                                        addLog('❌ Client ID를 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+                                    if (!testLastEventIdInput.trim()) {
+                                        addLog('⚠️ Last-Event-ID를 입력해주세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+
+                                    addLog('📥 한 명 Last-Event-ID 재연결 테스트 시작', LOG_TYPES.INFO);
+
+                                    // SSE 연결
+                                    const eventSource = new EventSource(
+                                        `${baseUrl}/sse/api/subscribe?clientId=${encodeURIComponent(testSubscribeClientId)}`,
+                                        {
+                                            withCredentials: true,
+                                            headers: { 'Last-Event-ID': testLastEventIdInput }
+                                        }
+                                    );
+
+                                    setTestEventSource(eventSource);
+                                    setTestIsConnected2(true);
+
+                                    eventSource.onmessage = e => {
+                                        addLog(`📩 메시지 수신 (Client ID=${testSubscribeClientId}): ${e.data}`, LOG_TYPES.MESSAGE);
+                                    };
+
+                                    eventSource.onerror = e => {
+                                        addLog(`❌ SSE 연결 오류 (Client ID=${testSubscribeClientId})`, LOG_TYPES.ERROR);
+                                        eventSource.close();
+                                        setTestIsConnected2(false);
+                                    };
+
+                                    addLog(`🔄 Last-Event-ID: ${testLastEventIdInput}로 ${testSubscribeClientId} 재연결 시도`, LOG_TYPES.INFO);
+                                }}
+                            >
+                                🔁 재연결
+                            </button>
+                        </div>
+                    </div>
+
+                </section>
+
+
+                <section className="sse-section scenario-box">
+
+                {/* 여러명 /subscribe */}
+                <div className="scenario-item">
+                    <p>1️⃣ 여러명 /subscribe?clientId= TPS 테스트</p>
+                    <div className="tps-input-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                            type="text"
+                            placeholder="Client ID Prefix 입력"
+                            value={testClientIdPrefix}
+                            onChange={e => setTestClientIdPrefix(e.target.value)}
+                            style={{ width: '180px', padding: '4px' }}
+                        />
+                        <input
+                            type="number"
+                            min="1"
+                            placeholder="테스트할 TPS 입력"
+                            value={testTpsInput}
+                            onChange={e => setTestTpsInput(e.target.value)}
+                            style={{ width: '120px', padding: '4px' }}
+                        />
+                        <button
+                            className="btn green"
+                            onClick={() => {
+                                const tps = parseInt(testTpsInput, 10);
+                                if (!tps || tps <= 0) {
+                                    addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
+                                    return;
+                                }
+                                if (!testClientIdPrefix.trim()) {
+                                    addLog('❌ Client ID Prefix를 입력하세요', LOG_TYPES.WARNING);
+                                    return;
+                                }
+
+                                addLog(`⚡ /subscribe TPS 테스트 시작: ${tps} TPS, Prefix: ${testClientIdPrefix}`, LOG_TYPES.INFO);
+
+                                if (broadIsConnected) {
+                                    addLog('✂️ 기존 SSE 연결 종료', LOG_TYPES.INFO);
+                                    disconnect();
+                                }
+
+                                const delay = 1000 / tps;
+                                for (let i = 0; i < tps; i++) {
+                                    setTimeout(async () => {
+                                        try {
+                                            await fetch(
+                                                `${baseUrl}/sse/api/subscribe?clientId=${testClientIdPrefix}${i + 1}`,
+                                                {
+                                                    method: 'GET',
+                                                    credentials: 'include',
+                                                    headers: { 'Last-Event-ID': testLastEventIdInput }
+                                                }
+                                            );
+                                        } catch (err) {
+                                            addLog(`❌ /subscribe 호출 오류: ${err.message}`, LOG_TYPES.ERROR);
+                                        }
+                                    }, i * delay);
+                                }
+                            }}
+                        >
+                            시작
+                        </button>
+                    </div>
+                </div>
+
+                    {/* 여러 명 message publish */}
+                    <div className="scenario-item">
+                        <p>2️⃣ 여러 명 message publish TPS 테스트</p>
+                        <div className="tps-input-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <input
+                                type="text"
+                                placeholder="Client ID Prefix 입력"
+                                value={broadcastClientIdPrefix}
+                                onChange={e => setBroadcastClientIdPrefix(e.target.value)}
+                                style={{ width: '180px', padding: '4px' }}
+                            />
+                            <input
+                                type="number"
+                                min="1"
+                                placeholder="테스트할 TPS 입력"
+                                value={broadcastCastTpsInput}
+                                onChange={e => setBroadcastCastTpsInput(e.target.value)}
+                                style={{ width: '120px', padding: '4px' }}
+                            />
+                            <button
+                                className="btn orange"
+                                onClick={() => {
+                                    const tps = parseInt(broadcastCastTpsInput, 10);
+                                    if (!tps || tps <= 0) {
+                                        addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+                                    if (!broadcastClientIdPrefix.trim()) {
+                                        addLog('❌ Client ID Prefix를 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+
+                                    addLog(`⚡ Broadcast /cast TPS 테스트 시작: ${tps} TPS, Prefix: ${broadcastClientIdPrefix}`, LOG_TYPES.INFO);
+                                    const delay = 1000 / tps;
+
+                                    for (let i = 0; i < tps; i++) {
+                                        setTimeout(async () => {
+                                            const clientId = `${broadcastClientIdPrefix}${i + 1}`; // 각 clientId 생성
+                                            try {
+                                                await fetch(`${baseUrl}/sse/api/cast`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    credentials: 'include',
+                                                    body: JSON.stringify({
+                                                        clientId, // broadcast clientId
+                                                        eventId: `epoch-${Date.now()}-${i}`,
+                                                        message: `테스트 메시지 ${i + 1}`,
+                                                        sendType: 'broadcast'
+                                                    })
+                                                });
+                                            } catch (err) {
+                                                addLog(`❌ /cast 호출 오류 (Client ID=${clientId}): ${err.message}`, LOG_TYPES.ERROR);
+                                            }
+                                        }, i * delay);
+                                    }
+                                }}
+                            >
+                                시작
+                            </button>
+                        </div>
+                    </div>
+
+
+                    <div className="scenario-item">
+                        <p>3️⃣ 여러 명 토큰 만료 후 Last-Event-ID로 /subscribe 재연결</p>
+                        <div className="last-event-id-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {/* Client ID Prefix 입력 */}
+                            <input
+                                type="text"
+                                placeholder="Client ID Prefix 입력"
+                                value={broadcastClientIdPrefix}
+                                onChange={e => setBroadcastClientIdPrefix(e.target.value)}
+                                style={{ padding: '4px', width: '180px' }}
+                            />
+                            {/* Last-Event-ID 입력 */}
+                            <input
+                                type="text"
+                                placeholder="Last-Event-ID 입력"
+                                value={testLastEventIdInput}
+                                onChange={e => setTestLastEventIdInput(e.target.value)}
+                                style={{ padding: '4px', width: '220px' }}
+                            />
+                            <button
+                                className="btn red"
+                                onClick={() => {
+                                    if (!authIsAuthenticated) {
+                                        addLog('❌ 인증 필요: 토큰을 발급하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+                                    if (!testLastEventIdInput.trim()) {
+                                        addLog('⚠️ Last-Event-ID를 입력해주세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+                                    if (!broadcastClientIdPrefix.trim()) {
+                                        addLog('❌ Client ID Prefix를 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+                                    const tps = parseInt(broadcastCastTpsInput, 10);
+                                    if (!tps || tps <= 0) {
+                                        addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
+                                        return;
+                                    }
+
+                                    addLog('📥 여러 명 Last-Event-ID 재연결 테스트 시작', LOG_TYPES.INFO);
+
+                                    // 기존 SSE 연결 종료
+                                    if (testEventSources.length > 0) {
+                                        testEventSourcesLast.forEach(es => es.close());
+                                        setTestEventSourcesLast([]);
+                                        setTestBroadIsConnected(false);
+                                        addLog('✂️ 기존 SSE 연결 종료', LOG_TYPES.INFO);
+                                    }
+
+                                    const delay = 1000 / tps;
+                                    const newEventSources = [];
+
+                                    for (let i = 0; i < tps; i++) {
+                                        setTimeout(() => {
+                                            const clientId = `${broadcastClientIdPrefix}${i + 1}`;
+                                            const es = new EventSource(
+                                                `${baseUrl}/sse/api/subscribe?clientId=${encodeURIComponent(clientId)}`,
+                                                { withCredentials: true }
+                                            );
+
+                                            es.onmessage = e => addLog(`📩 [${clientId}] 메시지 수신: ${e.data}`, LOG_TYPES.MESSAGE);
+                                            es.onerror = () => {
+                                                addLog(`❌ [${clientId}] SSE 연결 오류`, LOG_TYPES.ERROR);
+                                                es.close();
+                                            };
+
+                                            newEventSources.push(es);
+                                        }, i * delay);
+                                    }
+
+                                    setTestEventSourcesLast(newEventSources);
+                                    setTestBroadIsConnected(true);
+                                }}
+                            >
+                                🔁 재연결
+                            </button>
+                        </div>
+                    </div>
+
+
+
+                </section>
+
+
+            </section>
 
             {/* 인증 섹션 */}
             <section className={`sse-section auth-status ${authIsAuthenticated ? 'authenticated' : 'unauthenticated'}`}>
@@ -546,60 +955,6 @@ const SSEGateway = () => {
                     </button>
                 </div>
             </section>
-
-            {/* 브로드캐스트 채널 */}
-            {isBroadcastSupported && (
-                <section className="sse-section broadcast-section">
-                    <h3>📻 브라우저 탭 간 통신</h3>
-                    <div className="broadcast-info">
-                        <p><strong>채널 상태:</strong> {isBroadcastConnected ? '🟢 연결됨' : '🔴 연결 안됨'}</p>
-                        <p><strong>메시지 수:</strong> {broadcastMessages.length.toLocaleString()}개</p>
-                    </div>
-
-                    <div className="broadcast-send">
-                        <div className="input-group">
-                            <input
-                                type="text"
-                                value={broadcastInput}
-                                onChange={e => setBroadcastInput(e.target.value)}
-                                placeholder="다른 탭으로 보낼 메시지"
-                                onKeyPress={e => e.key === 'Enter' && handleSendBroadcast()}
-                                maxLength="500"
-                            />
-                            <button className="btn blue" onClick={handleSendBroadcast}>
-                                📤 전송
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="broadcast-messages">
-                        <div className="section-header">
-                            <h4>📨 수신 메시지 ({broadcastMessages.slice(-10).length}/10)</h4>
-                            <button className="btn gray small" onClick={clearBroadcastMessages}>
-                                🗑️ 정리
-                            </button>
-                        </div>
-
-                        <div className="message-list">
-                            {broadcastMessages.length === 0 ? (
-                                <p className="no-messages">브로드캐스트 메시지가 없습니다</p>
-                            ) : (
-                                broadcastMessages.slice(-10).map(message => (
-                                    <div key={message.id} className="message-item">
-                                        <div className="message-header">
-                                            <span className="message-type">[{message.type}]</span>
-                                            <span className="message-time">{new Date(message.receivedAt).toLocaleTimeString('ko-KR')}</span>
-                                        </div>
-                                        <div className="message-content">
-                                            {message.message || JSON.stringify(message.data, null, 2)}
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                </section>
-            )}
         </div>
     );
 };
