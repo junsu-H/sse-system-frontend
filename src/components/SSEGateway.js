@@ -8,8 +8,8 @@ import './SSEGateway.css';
 
 const SSEGateway = () => {
     // 기본 상태
-    const [serverUrl, setServerUrl] = useState('http://localhost:8090/subscribe');
-    const [baseUrl, setBaseUrl] = useState('http://localhost:8090');
+    const [baseUrl, setBaseUrl] = useState('http://localhost:9292');
+    const [serverUrl, setServerUrl] = useState('http://localhost:9292/sse/api/subscribe');
     const [broadcastInput, setBroadcastInput] = useState('');
     const [logs, setLogs] = useState([]);
     const [showLoginForm, setShowLoginForm] = useState(false);
@@ -169,19 +169,28 @@ const SSEGateway = () => {
     // 탭 활성화 감지
     useEffect(() => {
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible' && authIsAuthenticated && !isConnected) {
-                addLog('👁️ 탭 활성화 감지 - SSE 재연결 시작', LOG_TYPES.INFO);
-                setTimeout(() => {
-                    if (!isConnected) {
-                        connect();
-                    }
-                }, 1000);
+            if (document.visibilityState === 'visible') {
+                // 탭이 활성화되면 연결
+                if (authIsAuthenticated && !isConnected) {
+                    addLog('👁️ 탭 활성화 - SSE 재연결 시작', LOG_TYPES.INFO);
+                    setTimeout(() => {
+                        if (!isConnected) {
+                            connect();
+                        }
+                    }, 500);
+                }
+            } else {
+                // 탭이 비활성화되면 연결 끊기
+                if (isConnected) {
+                    addLog('🙈 탭 비활성화 - SSE 연결 종료', LOG_TYPES.INFO);
+                    disconnect();
+                }
             }
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }, [authIsAuthenticated, isConnected, connect]);
+    }, [authIsAuthenticated, isConnected, connect, disconnect]);
 
     // SSE 데이터 브로드캐스트
     useEffect(() => {
@@ -538,131 +547,6 @@ const SSEGateway = () => {
                 </div>
             </section>
 
-            {/* 서버 설정 */}
-            <section className="sse-section server-settings">
-                <h3>⚙️ 서버 설정</h3>
-                <div className="settings-grid">
-                    <label>
-                        API 베이스 URL:
-                        <input
-                            type="url"
-                            value={baseUrl}
-                            onChange={e => setBaseUrl(e.target.value)}
-                            placeholder="http://localhost:8090"
-                        />
-                    </label>
-
-                    <label>
-                        SSE 서버 URL:
-                        <input
-                            type="url"
-                            value={serverUrl}
-                            onChange={e => setServerUrl(e.target.value)}
-                            placeholder="http://localhost:8090/subscribe"
-                        />
-                    </label>
-                </div>
-
-                {/* 고급 설정 */}
-                <div className="advanced-settings">
-                    <button
-                        className="btn gray toggle-btn"
-                        onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                    >
-                        {showAdvancedSettings ? '🔼' : '🔽'} 고급 설정
-                    </button>
-
-                    {showAdvancedSettings && (
-                        <div className="advanced-settings-content">
-                            <div className="settings-grid">
-                                <label>
-                                    페이징 활성화:
-                                    <input
-                                        type="checkbox"
-                                        checked={sseSettings.enablePaging}
-                                        onChange={e => handleSettingsChange('enablePaging', e.target.checked)}
-                                    />
-                                </label>
-
-                                <label>
-                                    페이지 크기:
-                                    <input
-                                        type="number"
-                                        value={sseSettings.pageSize}
-                                        min="10"
-                                        max="1000"
-                                        onChange={e => handleSettingsChange('pageSize', parseInt(e.target.value))}
-                                    />
-                                </label>
-
-                                <label>
-                                    최대 재전송 이벤트:
-                                    <input
-                                        type="number"
-                                        value={sseSettings.maxReplayEvents}
-                                        min="100"
-                                        max="50000"
-                                        onChange={e => handleSettingsChange('maxReplayEvents', parseInt(e.target.value))}
-                                    />
-                                </label>
-
-                                <label>
-                                    버퍼 크기:
-                                    <input
-                                        type="number"
-                                        value={sseSettings.maxBufferSize}
-                                        min="100"
-                                        max="10000"
-                                        onChange={e => handleSettingsChange('maxBufferSize', parseInt(e.target.value))}
-                                    />
-                                </label>
-
-                                <label>
-                                    하트비트 활성화:
-                                    <input
-                                        type="checkbox"
-                                        checked={sseSettings.enableHeartbeat}
-                                        onChange={e => handleSettingsChange('enableHeartbeat', e.target.checked)}
-                                    />
-                                </label>
-
-                                <label>
-                                    하트비트 간격 (ms):
-                                    <input
-                                        type="number"
-                                        value={sseSettings.heartbeatInterval}
-                                        min="5000"
-                                        max="300000"
-                                        step="5000"
-                                        onChange={e => handleSettingsChange('heartbeatInterval', parseInt(e.target.value))}
-                                    />
-                                </label>
-
-                                <label>
-                                    최대 재연결 시도:
-                                    <input
-                                        type="number"
-                                        value={sseSettings.maxReconnectAttempts}
-                                        min="1"
-                                        max="100"
-                                        onChange={e => handleSettingsChange('maxReconnectAttempts', parseInt(e.target.value))}
-                                    />
-                                </label>
-
-                                <label>
-                                    메트릭스 수집:
-                                    <input
-                                        type="checkbox"
-                                        checked={sseSettings.enableMetrics}
-                                        onChange={e => handleSettingsChange('enableMetrics', e.target.checked)}
-                                    />
-                                </label>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </section>
-
             {/* 브로드캐스트 채널 */}
             {isBroadcastSupported && (
                 <section className="sse-section broadcast-section">
@@ -715,143 +599,6 @@ const SSEGateway = () => {
                         </div>
                     </div>
                 </section>
-            )}
-
-            {/* 데이터 및 디버그 정보 */}
-            <div className="data-section">
-                {/* SSE 데이터 */}
-                <section className="sse-section">
-                    <div className="section-header">
-                        <h3>📊 최신 SSE 데이터</h3>
-                        <div className="button-group">
-                            <button className="btn blue small" onClick={handleViewEventBuffer}>
-                                🔍 이벤트 버퍼
-                            </button>
-                            {sseSettings.enableMetrics && (
-                                <button className="btn green small" onClick={handleViewMetrics}>
-                                    📈 메트릭스
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="data-display">
-                        <pre>{sseData ? JSON.stringify(sseData, null, 2) : '데이터 없음'}</pre>
-                    </div>
-                </section>
-
-                {/* 로그 */}
-                <section className="sse-section logs-section">
-                    <div className="section-header">
-                        <h3>📝 시스템 로그 ({logs.length.toLocaleString()})</h3>
-                        <div className="button-group">
-                            <label className="auto-scroll-toggle">
-                                <input
-                                    type="checkbox"
-                                    checked={autoScroll}
-                                    onChange={e => setAutoScroll(e.target.checked)}
-                                />
-                                자동 스크롤
-                            </label>
-                            <button className="btn blue small" onClick={handleExportLogs}>
-                                💾 내보내기
-                            </button>
-                            <button className="btn gray small" onClick={() => setLogs([])}>
-                                🗑️ 정리
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="log-container" ref={logContainerRef}>
-                        {logs.map(log => (
-                            <div key={log.id} className={`log-entry log-${log.type}`}>
-                                <span className="log-timestamp">[{log.timestamp}]</span>
-                                <span className="log-message">{log.message}</span>
-                            </div>
-                        ))}
-                        {logs.length === 0 && (
-                            <div className="no-logs">로그가 없습니다</div>
-                        )}
-                    </div>
-                </section>
-            </div>
-
-            {/* 메트릭스 모달 */}
-            {showMetrics && sseSettings.enableMetrics && (
-                <div className="modal-overlay" onClick={() => setShowMetrics(false)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>📈 SSE 메트릭스</h3>
-                            <button className="btn gray small" onClick={() => setShowMetrics(false)}>✖️</button>
-                        </div>
-                        <div className="metrics-content">
-                            {(() => {
-                                const metrics = getMetrics();
-                                return (
-                                    <div className="metrics-grid">
-                                        <div className="metric-item">
-                                            <span className="metric-label">총 이벤트:</span>
-                                            <span className="metric-value">{metrics.totalEvents.toLocaleString()}</span>
-                                        </div>
-                                        <div className="metric-item">
-                                            <span className="metric-label">총 재연결:</span>
-                                            <span className="metric-value">{metrics.totalReconnects.toLocaleString()}</span>
-                                        </div>
-                                        <div className="metric-item">
-                                            <span className="metric-label">총 오류:</span>
-                                            <span className="metric-value">{metrics.totalErrors.toLocaleString()}</span>
-                                        </div>
-                                        <div className="metric-item">
-                                            <span className="metric-label">평균 이벤트 크기:</span>
-                                            <span className="metric-value">{formatBytes(metrics.averageEventSize)}</span>
-                                        </div>
-                                        <div className="metric-item">
-                                            <span className="metric-label">연결 시간:</span>
-                                            <span className="metric-value">{formatDuration(metrics.connectionUptime)}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* 이벤트 버퍼 모달 */}
-            {showEventBuffer && (
-                <div className="modal-overlay" onClick={() => setShowEventBuffer(false)}>
-                    <div className="modal-content large" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>🔍 이벤트 버퍼</h3>
-                            <button className="btn gray small" onClick={() => setShowEventBuffer(false)}>✖️</button>
-                        </div>
-                        <div className="buffer-content">
-                            {(() => {
-                                const buffer = getEventBuffer();
-                                return (
-                                    <div className="buffer-list">
-                                        {buffer.slice(-50).map((event, index) => (
-                                            <div key={`${event.id}-${index}`} className="buffer-item">
-                                                <div className="buffer-header">
-                                                    <span className="event-id">ID: {event.id}</span>
-                                                    <span className="event-type">타입: {event.type}</span>
-                                                    <span className="event-size">크기: {formatBytes(event.size)}</span>
-                                                    <span className="event-time">{new Date(event.timestamp).toLocaleString('ko-KR')}</span>
-                                                </div>
-                                                <div className="buffer-data">
-                                                    <pre>{JSON.stringify(event.data, null, 2)}</pre>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {buffer.length === 0 && (
-                                            <div className="no-buffer">버퍼에 이벤트가 없습니다</div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                </div>
             )}
         </div>
     );

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 
-export default function useAuth(baseUrl = 'http://localhost:8090') {
+export default function useAuth(baseUrl = 'http://localhost:9292') {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -16,7 +16,7 @@ export default function useAuth(baseUrl = 'http://localhost:8090') {
   const login = useCallback(async creds => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`${baseUrl}/api/auth`, {
+      const res = await fetch(`${baseUrl}/sse/api/auth/token`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -35,7 +35,7 @@ export default function useAuth(baseUrl = 'http://localhost:8090') {
   const refreshToken = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`${baseUrl}/api/auth/refresh`, {
+      const res = await fetch(`${baseUrl}/sse/api/auth/token/refresh`, {
         method: 'POST',
         credentials: 'include'
       });
