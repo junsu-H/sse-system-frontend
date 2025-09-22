@@ -1,5 +1,6 @@
 // src/components/SSEGateway.js
 import React, { useState, useEffect, useRef } from 'react';
+import { EventSourcePolyfill } from 'event-source-polyfill';
 import useSSE from '../hooks/useSSE';
 import useAuth from '../hooks/useAuth';
 import useBroadcastChannel from '../hooks/useBroadcastChannel';
@@ -335,32 +336,30 @@ const SSEGateway = () => {
     const [testEventSource, setTestEventSource] = useState(null);
     const [testIsConnected2, setTestIsConnected2] = useState(false);
 
-    // 1명 subscribe
-    const [testSubscribeClientId, setTestSubscribeClientId] = useState('');
     // subscribe tps
     const [testTpsInput, setTestTpsInput] = useState('5'); // 기본 5TPS
 
     // cast tps
     const [testCastTpsInput, setTestCastTpsInput] = useState('5');
     // unicast
-    const [testCastClientId, setTestCastClientId] = useState('');
+    const [unicastClientId, setUnicastClientId] = useState('test-client');
 
     // last-event-id
-    const [testLastEventIdInput, setTestLastEventIdInput] = useState('');
-
+    const [unicastLastEventIdInput, setUnicastLastEventIdInput] = useState('1-1');
+    const [broadcastLastEventIdInput, setBroadcastLastEventIdInput] = useState('2-1');
 
     // 여러명 /subscribe
     const [testClientIdPrefix, setTestClientIdPrefix] = useState('');
 
-    // 여러 명 SSE 연결 상태 관리
+    // 브로드캐스트 SSE 연결 상태 관리
     const [testEventSources, setTestEventSources] = useState([]); // EventSource 배열
     const [broadIsConnected, setBroadIsConnected] = useState(false);
 
-    // 여러 명 /broadcast 관련 상태
-    const [broadcastClientIdPrefix, setBroadcastClientIdPrefix] = useState('');
+    // 브로드캐스트 /broadcast 관련 상태
+    const [broadcastClientIdPrefix, setBroadcastClientIdPrefix] = useState('test-client-');
     const [broadcastCastTpsInput, setBroadcastCastTpsInput] = useState('5'); // 기본 5TPS
 
-    // 여러 명 SSE 연결 상태 관리
+    // 브로드캐스트 SSE 연결 상태 관리
     const [testEventSourcesLast, setTestEventSourcesLast] = useState([]); // EventSource 배열
     const [testBroadIsConnected, setTestBroadIsConnected] = useState(false); // 연결 상태
 
@@ -387,13 +386,13 @@ const SSEGateway = () => {
                 <section className="sse-section scenario-box">
                     {/* /subscribe TPS 테스트 (입력 기반) */}
                     <div className="scenario-item">
-                        <p>1️⃣ 한 명 /subscribe TPS 테스트</p>
+                        <p>1️⃣ 유니캐스트 /subscribe TPS 테스트</p>
                         <div className="tps-input-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <input
                                 type="text"
                                 placeholder="Client ID 입력"
-                                value={testSubscribeClientId}
-                                onChange={e => setTestSubscribeClientId(e.target.value)}
+                                value={unicastClientId}
+                                onChange={e => setUnicastClientId(e.target.value)}
                                 style={{ width: '180px', padding: '4px' }}
                             />
                             <input
@@ -412,12 +411,12 @@ const SSEGateway = () => {
                                         addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
                                         return;
                                     }
-                                    if (!testSubscribeClientId.trim()) {
+                                    if (!unicastClientId.trim()) {
                                         addLog('❌ Client ID를 입력하세요', LOG_TYPES.WARNING);
                                         return;
                                     }
 
-                                    addLog(`⚡ /subscribe TPS 테스트 시작: ${tps} TPS, Client ID: ${testSubscribeClientId}`, LOG_TYPES.INFO);
+                                    addLog(`⚡ /subscribe TPS 테스트 시작: ${tps} TPS, Client ID: ${unicastClientId}`, LOG_TYPES.INFO);
 
                                     if (testIsConnected2) {
                                         addLog('✂️ 기존 SSE 연결 종료', LOG_TYPES.INFO);
@@ -429,11 +428,11 @@ const SSEGateway = () => {
                                         setTimeout(async () => {
                                             try {
                                                 await fetch(
-                                                    `${baseUrl}/sse/api/subscribe?clientId=${encodeURIComponent(testSubscribeClientId)}`,
+                                                    `${baseUrl}/sse/api/subscribe?clientId=${encodeURIComponent(unicastClientId)}`,
                                                     {
                                                         method: 'GET',
                                                         credentials: 'include',
-                                                        headers: { 'Last-Event-ID': testLastEventIdInput }
+                                                        headers: { 'Last-Event-ID': unicastLastEventIdInput }
                                                     }
                                                 );
                                             } catch (err) {
@@ -448,15 +447,15 @@ const SSEGateway = () => {
                         </div>
                     </div>
 
-                    {/* 한 명 message publish TPS 테스트 */}
+                    {/* 유니캐스트 message publish TPS 테스트 */}
                     <div className="scenario-item">
-                        <p>2️⃣ 한 명 message publish TPS 테스트</p>
+                        <p>2️⃣ 유니캐스트 message publish TPS 테스트</p>
                         <div className="tps-input-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <input
                                 type="text"
                                 placeholder="Client ID 입력"
-                                value={testCastClientId}
-                                onChange={e => setTestCastClientId(e.target.value)}
+                                value={unicastClientId}
+                                onChange={e => setUnicastClientId(e.target.value)}
                                 style={{ width: '180px', padding: '4px' }}
                             />
                             <input
@@ -475,12 +474,12 @@ const SSEGateway = () => {
                                         addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
                                         return;
                                     }
-                                    if (!testCastClientId.trim()) {
+                                    if (!unicastClientId.trim()) {
                                         addLog('❌ Client ID를 입력하세요', LOG_TYPES.WARNING);
                                         return;
                                     }
 
-                                    addLog(`⚡ /cast unicast TPS 테스트 시작: ${tps} TPS, Client ID: ${testCastClientId}`, LOG_TYPES.INFO);
+                                    addLog(`⚡ /cast unicast TPS 테스트 시작: ${tps} TPS, Client ID: ${unicastClientId}`, LOG_TYPES.INFO);
                                     const delay = 1000 / tps;
 
                                     for (let i = 0; i < tps; i++) {
@@ -491,7 +490,7 @@ const SSEGateway = () => {
                                                     headers: { 'Content-Type': 'application/json' },
                                                     credentials: 'include',
                                                     body: JSON.stringify({
-                                                        clientId: testCastClientId,
+                                                        clientId: unicastClientId,
                                                         eventId: `epoch-${Date.now()}-${i}`,
                                                         message: `테스트 메시지 ${i + 1}`,
                                                         sendType: 'unicast'
@@ -511,46 +510,33 @@ const SSEGateway = () => {
 
                     {/* last-event-id 처리 */}
                     <div className="scenario-item">
-                        <p>3️⃣ 한 명 토큰 만료 후 Last-Event-ID로 /subscribe 재연결</p>
+                        <p>3️⃣ 유니캐스트 토큰 만료 후 Last-Event-ID로 /subscribe 재연결</p>
                         <div className="last-event-id-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <input
                                 type="text"
                                 placeholder="Client ID 입력"
-                                value={testSubscribeClientId} // 한 명용 Client ID
-                                onChange={e => setTestSubscribeClientId(e.target.value)}
+                                value={unicastClientId} // 유니캐스트용 Client ID
+                                onChange={e => setUnicastClientId(e.target.value)}
                                 style={{ padding: '4px', width: '180px' }}
                             />
                             <input
                                 type="text"
                                 placeholder="Last-Event-ID 입력"
-                                value={testLastEventIdInput}
-                                onChange={e => setTestLastEventIdInput(e.target.value)}
+                                value={unicastLastEventIdInput}
+                                onChange={e => setUnicastLastEventIdInput(e.target.value)}
                                 style={{ padding: '4px', width: '220px' }}
                             />
                             <button
                                 className="btn red"
                                 onClick={() => {
-                                    if (!authIsAuthenticated) {
-                                        addLog('❌ 인증 필요: 토큰을 발급하세요', LOG_TYPES.WARNING);
-                                        return;
-                                    }
-                                    if (!testSubscribeClientId.trim()) {
-                                        addLog('❌ Client ID를 입력하세요', LOG_TYPES.WARNING);
-                                        return;
-                                    }
-                                    if (!testLastEventIdInput.trim()) {
-                                        addLog('⚠️ Last-Event-ID를 입력해주세요', LOG_TYPES.WARNING);
-                                        return;
-                                    }
-
-                                    addLog('📥 한 명 Last-Event-ID 재연결 테스트 시작', LOG_TYPES.INFO);
-
                                     // SSE 연결
-                                    const eventSource = new EventSource(
-                                        `${baseUrl}/sse/api/subscribe?clientId=${encodeURIComponent(testSubscribeClientId)}`,
+                                    const eventSource = new EventSourcePolyfill(
+                                        `${baseUrl}/sse/api/subscribe?clientId=${encodeURIComponent(unicastClientId)}`,
                                         {
-                                            withCredentials: true,
-                                            headers: { 'Last-Event-ID': testLastEventIdInput }
+                                            headers: {
+                                                'Last-Event-ID': unicastLastEventIdInput
+                                            },
+                                            withCredentials: true
                                         }
                                     );
 
@@ -558,16 +544,16 @@ const SSEGateway = () => {
                                     setTestIsConnected2(true);
 
                                     eventSource.onmessage = e => {
-                                        addLog(`📩 메시지 수신 (Client ID=${testSubscribeClientId}): ${e.data}`, LOG_TYPES.MESSAGE);
+                                        addLog(`📩 메시지 수신 (Client ID=${unicastClientId}): ${e.data}`, LOG_TYPES.MESSAGE);
                                     };
 
                                     eventSource.onerror = e => {
-                                        addLog(`❌ SSE 연결 오류 (Client ID=${testSubscribeClientId})`, LOG_TYPES.ERROR);
+                                        addLog(`❌ SSE 연결 오류 (Client ID=${unicastClientId})`, LOG_TYPES.ERROR);
                                         eventSource.close();
                                         setTestIsConnected2(false);
                                     };
 
-                                    addLog(`🔄 Last-Event-ID: ${testLastEventIdInput}로 ${testSubscribeClientId} 재연결 시도`, LOG_TYPES.INFO);
+                                    addLog(`🔄 Last-Event-ID: ${unicastLastEventIdInput}로 ${unicastClientId} 재연결 시도`, LOG_TYPES.INFO);
                                 }}
                             >
                                 🔁 재연결
@@ -587,8 +573,8 @@ const SSEGateway = () => {
                         <input
                             type="text"
                             placeholder="Client ID Prefix 입력"
-                            value={testClientIdPrefix}
-                            onChange={e => setTestClientIdPrefix(e.target.value)}
+                            value={broadcastClientIdPrefix}
+                            onChange={e => setBroadcastClientIdPrefix(e.target.value)}
                             style={{ width: '180px', padding: '4px' }}
                         />
                         <input
@@ -603,32 +589,15 @@ const SSEGateway = () => {
                             className="btn green"
                             onClick={() => {
                                 const tps = parseInt(testTpsInput, 10);
-                                if (!tps || tps <= 0) {
-                                    addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
-                                    return;
-                                }
-                                if (!testClientIdPrefix.trim()) {
-                                    addLog('❌ Client ID Prefix를 입력하세요', LOG_TYPES.WARNING);
-                                    return;
-                                }
-
-                                addLog(`⚡ /subscribe TPS 테스트 시작: ${tps} TPS, Prefix: ${testClientIdPrefix}`, LOG_TYPES.INFO);
-
-                                if (broadIsConnected) {
-                                    addLog('✂️ 기존 SSE 연결 종료', LOG_TYPES.INFO);
-                                    disconnect();
-                                }
-
                                 const delay = 1000 / tps;
                                 for (let i = 0; i < tps; i++) {
                                     setTimeout(async () => {
                                         try {
                                             await fetch(
-                                                `${baseUrl}/sse/api/subscribe?clientId=${testClientIdPrefix}${i + 1}`,
+                                                `${baseUrl}/sse/api/subscribe?clientId=${broadcastClientIdPrefix}${i + 1}`,
                                                 {
                                                     method: 'GET',
                                                     credentials: 'include',
-                                                    headers: { 'Last-Event-ID': testLastEventIdInput }
                                                 }
                                             );
                                         } catch (err) {
@@ -643,9 +612,9 @@ const SSEGateway = () => {
                     </div>
                 </div>
 
-                    {/* 여러 명 message publish */}
+                    {/* 브로드캐스트 message publish */}
                     <div className="scenario-item">
-                        <p>2️⃣ 여러 명 message publish TPS 테스트</p>
+                        <p>2️⃣ 브로드캐스트 message publish TPS 테스트</p>
                         <div className="tps-input-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <input
                                 type="text"
@@ -707,7 +676,7 @@ const SSEGateway = () => {
 
 
                     <div className="scenario-item">
-                        <p>3️⃣ 여러 명 토큰 만료 후 Last-Event-ID로 /subscribe 재연결</p>
+                        <p>3️⃣ 브로드캐스트 토큰 만료 후 Last-Event-ID로 /subscribe 재연결</p>
                         <div className="last-event-id-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             {/* Client ID Prefix 입력 */}
                             <input
@@ -721,32 +690,20 @@ const SSEGateway = () => {
                             <input
                                 type="text"
                                 placeholder="Last-Event-ID 입력"
-                                value={testLastEventIdInput}
-                                onChange={e => setTestLastEventIdInput(e.target.value)}
+                                value={broadcastLastEventIdInput}
+                                onChange={e => setBroadcastLastEventIdInput(e.target.value)}
                                 style={{ padding: '4px', width: '220px' }}
                             />
                             <button
                                 className="btn red"
                                 onClick={() => {
-                                    if (!authIsAuthenticated) {
-                                        addLog('❌ 인증 필요: 토큰을 발급하세요', LOG_TYPES.WARNING);
-                                        return;
-                                    }
-                                    if (!testLastEventIdInput.trim()) {
-                                        addLog('⚠️ Last-Event-ID를 입력해주세요', LOG_TYPES.WARNING);
-                                        return;
-                                    }
-                                    if (!broadcastClientIdPrefix.trim()) {
-                                        addLog('❌ Client ID Prefix를 입력하세요', LOG_TYPES.WARNING);
-                                        return;
-                                    }
                                     const tps = parseInt(broadcastCastTpsInput, 10);
                                     if (!tps || tps <= 0) {
                                         addLog('❌ 올바른 TPS 값을 입력하세요', LOG_TYPES.WARNING);
                                         return;
                                     }
 
-                                    addLog('📥 여러 명 Last-Event-ID 재연결 테스트 시작', LOG_TYPES.INFO);
+                                    addLog('📥 브로드캐스트 Last-Event-ID 재연결 테스트 시작', LOG_TYPES.INFO);
 
                                     // 기존 SSE 연결 종료
                                     if (testEventSources.length > 0) {
@@ -762,9 +719,14 @@ const SSEGateway = () => {
                                     for (let i = 0; i < tps; i++) {
                                         setTimeout(() => {
                                             const clientId = `${broadcastClientIdPrefix}${i + 1}`;
-                                            const es = new EventSource(
+                                            const es = new EventSourcePolyfill(
                                                 `${baseUrl}/sse/api/subscribe?clientId=${encodeURIComponent(clientId)}`,
-                                                { withCredentials: true }
+                                                {
+                                                    headers: {
+                                                        'Last-Event-ID': broadcastLastEventIdInput
+                                                    },
+                                                    withCredentials: true
+                                                }
                                             );
 
                                             es.onmessage = e => addLog(`📩 [${clientId}] 메시지 수신: ${e.data}`, LOG_TYPES.MESSAGE);
@@ -785,13 +747,9 @@ const SSEGateway = () => {
                             </button>
                         </div>
                     </div>
-
-
-
                 </section>
-
-
             </section>
+
 
             {/* 인증 섹션 */}
             <section className={`sse-section auth-status ${authIsAuthenticated ? 'authenticated' : 'unauthenticated'}`}>
